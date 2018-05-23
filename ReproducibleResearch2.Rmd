@@ -1,0 +1,148 @@
+---
+title: "The Impact of Harmful Weather Events to Health and Economy in the United States "
+author: "Adrian R Angkawijaya"
+date: "5/22/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## *Synopsis*
+This project explores and analyzes the National Oceanic and Atmospheric Administration's (NOAA) storm database. It involves an exploratory data analysis to see which type of events contributes to the most harmful effects on the population health and economy. 
+
+We analyze and address the following questions:
+
+1. Across the United States, which types of events are most harmful with respect to population health?
+2. Across the United States, which types of events have the greatest economic consequences?
+
+We find that tornado is the most harmful event for the population health, indicated by the large amount of injuries and fatalities. However, flood is the most harmful event that is responsible for economic losses.
+
+## *Data Processing*
+**We first download and see the structure of the data.**
+```{r}
+if (!file.exists("Courseradata")) {
+    dir.create("Courseradata")
+}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl, destfile = "/Users/adrianromano/Downloads/Courseradata/StormData.csv.bz2", method = "curl")
+
+stormData <- read.csv(bzfile("/Users/adrianromano/Downloads/Courseradata/StormData.csv.bz2"))
+# str(stormData)
+```
+
+**We then find the total number of injuries and fatalities of the population and group them based on event types in descending order as follows:**
+```{r, result = "hide"}
+library(dplyr)
+```
+```{r}
+fatalities <- stormData %>%
+    select(EVTYPE, FATALITIES) %>%
+    group_by(EVTYPE) %>%
+    summarize(sum = sum(FATALITIES)) %>%
+    arrange(-sum)
+head(fatalities)
+
+injuries <- stormData %>%
+    select(EVTYPE, INJURIES) %>%
+    group_by(EVTYPE) %>%
+    summarize(sum = sum(INJURIES)) %>%
+    arrange(-sum)
+head(injuries)
+```
+
+**We see the unique values for PROPDMGEXP and CROPDMGEXP:**
+```{r}
+unique(stormData$PROPDMGEXP)
+unique(stormData$CROPDMGEXP)
+```
+
+* *We noticed that there are some lower letter characters so we convert them to upper letter characters so they all match*
+```{r}
+stormData$PROPDMGEXP <- toupper(stormData$PROPDMGEXP)
+stormData$CROPDMGEXP <- toupper(stormData$CROPDMGEXP)
+unique(stormData$PROPDMGEXP)
+unique(stormData$CROPDMGEXP)
+```
+PRODMGEXP and CROPDMGEXP are the exponent values for PROPDMG (Property Damage) and CROPDMG (Crop Damage) respectively.
+We noticed that there are both numeric and character unique values, the character values are defined as follows:
+
+* B = Billions (9)
+* M = Millions (6)
+* K = Thousands (3)
+* H = Hundreds (2)
+* The symbols (+, -, ?) which we assumed later to be 0.
+
+**We make the conversion to convert all to numeric values as follows:**
+```{r}
+stormData[stormData$PROPDMGEXP %in% c("", "+", "-", "?"), "PROPDMGEXP"] <- "0"
+stormData[stormData$CROPDMGEXP %in% c("", "?"), "CROPDMGEXP"] <- "0"
+stormData[stormData$PROPDMGEXP == "K", "PROPDMGEXP"] <- "3"
+stormData[stormData$PROPDMGEXP == "M", "PROPDMGEXP"] <- "6"
+stormData[stormData$PROPDMGEXP == "B", "PROPDMGEXP"] <- "9"
+stormData[stormData$PROPDMGEXP == "H", "PROPDMGEXP"] <- "2"
+stormData[stormData$CROPDMGEXP == "M", "CROPDMGEXP"] <- "6"
+stormData[stormData$CROPDMGEXP == "K", "CROPDMGEXP"] <- "3"
+stormData[stormData$CROPDMGEXP == "B", "CROPDMGEXP"] <- "9"
+```
+**Check:**
+```{r}
+unique(stormData$PROPDMGEXP)
+unique(stormData$CROPDMGEXP)
+```
+
+* *The numbers 0 - 9 represents the power of 10. For example, 8 means 10^8*
+
+**We calculate the total damage by combining the damage values of the population properties and crops. We calculate the total damage and group them based on event types in descending order as follows:**
+```{r}
+library(dplyr)
+stormData$PROPDMGEXP <- as.integer(stormData$PROPDMGEXP)
+stormData$CROPDMGEXP <- as.integer(stormData$CROPDMGEXP)
+totalDamage <- stormData %>%
+    mutate(PROPDMGEXP2 = (10 ** PROPDMGEXP)) %>%
+    mutate(CROPDMGEXP2 = (10 ** CROPDMGEXP)) %>%
+    mutate(PROPDMG2 = PROPDMG * PROPDMGEXP2) %>%
+    mutate(CROPDMG2 = CROPDMG * CROPDMGEXP2) %>%
+    mutate(TOTALDMG = PROPDMG2 + CROPDMG2) 
+
+totalDamage2 <- totalDamage %>%
+    select(EVTYPE, TOTALDMG) %>%
+    group_by(EVTYPE) %>%
+    summarize(sum = sum(TOTALDMG)) %>%
+    arrange(-sum)
+totalDamage2
+```
+
+## *Results*
+
+**Across the United States, which types of events are most harmful with respect to population health?**
+```{r}
+library(ggplot2)
+ggplot(fatalities[1:8, ], aes(x = reorder(EVTYPE, sum), y = sum, fill = EVTYPE, alpha = 0.1)) +
+    geom_bar(stat = "identity", col = "black") +
+    xlab("Event Type") +
+    ylab("Number of Fatalities") +
+    ggtitle("Top 8 Events with Highest Total Fatalities") +
+    coord_flip() +
+    guides(fill = FALSE, alpha = FALSE)
+
+ggplot(injuries[1:8, ], aes(x = reorder(EVTYPE, sum), y = sum, fill = EVTYPE, alpha = 0.1)) +
+    geom_bar(stat = "identity", col = "black") +
+    xlab("Event Type") +
+    ylab("Number of Injuries") +
+    ggtitle("Top 8 Events with Highest Total Injuries") +
+    coord_flip() +
+    guides(fill = FALSE, alpha = FALSE)
+```
+
+**Across the United States, which types of events have the greatest economic consequences?**
+```{r}
+library(ggplot2)
+ggplot(totalDamage2[1:8, ], aes(x = reorder(EVTYPE, sum), y = sum, fill = EVTYPE, alpha = 0.1)) +
+    geom_bar(stat = "identity", col = "black") +
+    xlab("Event Type") +
+    ylab("Total Damages in USD") +
+    ggtitle("Top 8 Events with Highest Total Economic Impact") +
+    coord_flip() +
+    guides(fill = FALSE, alpha = FALSE)
+```
